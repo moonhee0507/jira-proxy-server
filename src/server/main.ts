@@ -33,8 +33,6 @@ app.get("/api/jira/tickets/:ticketId", async (_, res) => {
       },
     });
 
-    console.log('response.data', response.data)
-
     const summary = response.data.fields.summary
     const status = response.data.fields.status
 
@@ -84,6 +82,8 @@ app.post("/api/report", async (req, res) => {
     const body = req.body
     body.createdAt = new Date()
 
+    body.reportedAt = new Date(body.reportedAt)
+
     const db = getDB()
     const collection = db.collection('reports')
     const result = await collection.insertOne(body)
@@ -102,6 +102,7 @@ app.put("/api/report/:uid", async (req, res) => {
   try {
     const { uid } = req.params
     const body = req.body
+    body.reportedAt = new Date(body.reportedAt)
     body.updatedAt = new Date()
 
     const db = getDB()
@@ -160,18 +161,35 @@ app.get('/api/teams', async (req, res) => {
 // Get latest reports by reportedAt and teamId (max 5)
 app.get('/api/reports', async (req, res) => {
   try {
-    const { reportedAt, teamId } = req.query
-    const db = getDB()
-    const collection = db.collection('reports')
+    const { reportedAt, teamId } = req.query;
+    console.log('Received query:', { reportedAt, teamId });
 
-    const result = await collection.find({ reportedAt, _id: new ObjectId(teamId as string) }).sort({ reportedAt: -1 }).limit(5).toArray()
-
-    if (!result || result.length === 0) {
-      res.status(404).json({ error: 'No reports found' })
-      return
+    if (!reportedAt || !teamId) {
+      res.status(400).json({ error: 'Missing reportedAt or teamId' });
+      return;
     }
 
-    res.status(200).json({ data: result, message: 'success' })
+    const db = getDB();
+    const collection = db.collection('reports');
+
+    const reportedAtDate = new Date(reportedAt as string);
+
+    const result = await collection.find({
+      'team.uid': teamId,
+      reportedAt: { $lte: reportedAtDate },
+    })
+    .sort({ registeredAt: -1 }) // 최신 등록순
+    .limit(5)
+    .toArray();
+
+    console.log('Fetched reports:', result);
+
+    if (!result || result.length === 0) {
+      res.status(404).json({ error: 'No reports found' });
+      return;
+    }
+
+    res.status(200).json({ data: result, message: 'success' });
   } catch (error) {
     console.error('Error fetching reports:', error)
 
@@ -187,8 +205,7 @@ app.get('/api/report', async (req, res) => {
     const collection = db.collection('reports');
     
     // teamId와 reportedAt을 기준으로 리포트를 검색
-    const result = await collection.findOne({ 'team.uid': teamId, reportedAt });
-    console.log(result)
+    const result = await collection.findOne({ 'team.uid': teamId, reportedAt: new Date(reportedAt as string) });
 
     if (!result) {
       res.status(404).json({ error: 'Report not found' });
