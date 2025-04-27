@@ -35,7 +35,6 @@ app.get("/api/jira/tickets/:ticketId", async (_, res) => {
 
     const summary = response.data.fields.summary
     const status = response.data.fields.status
-    // const { summary, status } = response.data
 
     res.status(200).json({ summary, status })
   } catch (error) {
@@ -75,6 +74,19 @@ app.get("/api/jira/release", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch release data" });
   }
 });
+
+app.post("/api/report", (req, res) => {
+  try {
+    const body = req.body
+    const db = getDB()
+    const collection = db.collection('reports')
+    collection.insertOne(body)
+    res.status(200).json({ message: 'Report created successfully' })
+  } catch (error) {
+    console.log('Error creating report:', error)
+    res.status(500).json({ error: 'Failed to create report' })
+  }
+})
 
 ViteExpress.listen(app, Number(process.env.PORT), async () => {
   await connectDB();

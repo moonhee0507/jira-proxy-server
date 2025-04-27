@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
-const dbName = 'weeklyReportDatabase'; // 사용할 데이터베이스 이름
+const dbName = 'testDatabase';
 
 let db: Db;
 
