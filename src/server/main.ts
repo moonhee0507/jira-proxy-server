@@ -41,8 +41,8 @@ app.get("/api/jira/tickets/:ticketId", async (_, res) => {
     res.status(200).json({ summary, status })
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-      console.log('Error status:', error.response.status);
-      console.log('Error data:', error.response.data);
+      console.error('Error status:', error.response.status);
+      console.error('Error data:', error.response.data);
     }
     res.status(500).json({ error: "Failed to fetch ticket" })
   }
@@ -71,8 +71,8 @@ app.get("/api/jira/release", async (req, res) => {
     res.status(200).json(response.data);
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-      console.log('Error status:', error.response.status);
-      console.log('Error data:', error.response.data);
+      console.error('Error status:', error.response.status);
+      console.error('Error data:', error.response.data);
     }
     res.status(500).json({ error: "Failed to fetch release data" });
   }
@@ -91,7 +91,7 @@ app.post("/api/report", async (req, res) => {
 
     res.status(200).json({ _id })
   } catch (error) {
-    console.log('Error creating report:', error)
+    console.error('Error creating report:', error)
 
     res.status(500).json({ error: 'Failed to create report' })
   }
@@ -115,7 +115,7 @@ app.put("/api/report/:uid", async (req, res) => {
 
     res.status(200).json({ _id: uid, message: 'success' })
   } catch (error) {
-    console.log('Error updating report:', error)
+    console.error('Error updating report:', error)
 
     res.status(500).json({ error: 'Failed to update report' })
   }
@@ -136,7 +136,7 @@ app.get("/api/reports/:uid", async (req, res) => {
 
     res.status(200).json({ data: result, message: 'success' })
   } catch (error) {
-    console.log('Error fetching report:', error)
+    console.error('Error fetching report:', error)
 
     res.status(500).json({ error: 'Failed to fetch report' })
   }
@@ -151,7 +151,7 @@ app.get('/api/teams', async (req, res) => {
 
     res.status(200).json({ data: result, message: 'success' })
   } catch (error) {
-    console.log('Error fetching teams:', error)
+    console.error('Error fetching teams:', error)
 
     res.status(500).json({ error: 'Failed to fetch teams' })
   }
@@ -173,7 +173,7 @@ app.get('/api/reports', async (req, res) => {
 
     res.status(200).json({ data: result, message: 'success' })
   } catch (error) {
-    console.log('Error fetching reports:', error)
+    console.error('Error fetching reports:', error)
 
     res.status(500).json({ error: 'Failed to fetch reports' })
   }
@@ -198,7 +198,7 @@ app.get('/api/report', async (req, res) => {
     // 리포트가 존재할 경우 _id를 반환
     res.status(200).json({ data: result, message: 'success' });
   } catch (error) {
-    console.log('Error checking report:', error);
+    console.error('Error checking report:', error);
     res.status(500).json({ error: 'Failed to check report' });
   }
 });
