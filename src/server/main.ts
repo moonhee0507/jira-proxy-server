@@ -78,16 +78,18 @@ app.get("/api/jira/release", async (req, res) => {
   }
 });
 
-// Create report
+// Create report (Write view)
 app.post("/api/report", async (req, res) => {
   try {
     const body = req.body
+    body.createdAt = new Date()
+
     const db = getDB()
     const collection = db.collection('reports')
     const result = await collection.insertOne(body)
-    const uid = result.insertedId
+    const _id = result.insertedId
 
-    res.status(200).json({ uid })
+    res.status(200).json({ _id })
   } catch (error) {
     console.log('Error creating report:', error)
 
@@ -95,11 +97,12 @@ app.post("/api/report", async (req, res) => {
   }
 })
 
-// Update a report
+// Update a report (Edit view)
 app.put("/api/report/:uid", async (req, res) => {
   try {
     const { uid } = req.params
     const body = req.body
+    body.updatedAt = new Date()
 
     const db = getDB()
     const collection = db.collection('reports')
@@ -110,7 +113,7 @@ app.put("/api/report/:uid", async (req, res) => {
       return
     }
 
-    res.status(200).json({ message: 'success' })
+    res.status(200).json({ _id: uid, message: 'success' })
   } catch (error) {
     console.log('Error updating report:', error)
 
@@ -118,7 +121,7 @@ app.put("/api/report/:uid", async (req, res) => {
   }
 })
 
-// Get a report by uid
+// Get a report by uid (Detail view)
 app.get("/api/reports/:uid", async (req, res) => {
   try {
     const { uid } = req.params
@@ -139,7 +142,7 @@ app.get("/api/reports/:uid", async (req, res) => {
   }
 })
 
-// Get team list
+// Get team list (Entry view)
 app.get('/api/teams', async (req, res) => {
   try {
     const db = getDB()
@@ -175,6 +178,30 @@ app.get('/api/reports', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch reports' })
   }
 })
+
+// Check if a report exists by teamId and reportedAt (Before Write view or Edit view)
+app.get('/api/report', async (req, res) => {
+  try {
+    const { teamId, reportedAt } = req.query;
+    const db = getDB();
+    const collection = db.collection('reports');
+    
+    // teamId와 reportedAt을 기준으로 리포트를 검색
+    const result = await collection.findOne({ 'team.uid': teamId, reportedAt });
+    console.log(result)
+
+    if (!result) {
+      res.status(404).json({ error: 'Report not found' });
+      return;
+    }
+
+    // 리포트가 존재할 경우 _id를 반환
+    res.status(200).json({ data: result, message: 'success' });
+  } catch (error) {
+    console.log('Error checking report:', error);
+    res.status(500).json({ error: 'Failed to check report' });
+  }
+});
 
 ViteExpress.listen(app, Number(process.env.PORT), async () => {
   await connectDB();
