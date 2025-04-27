@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import axios from "axios";
 import cors from "cors";
 import { connectDB, getDB } from "./db.js";
+import { ObjectId } from "mongodb";
 dotenv.config();
 
 const app = express();
@@ -14,6 +15,7 @@ app.use(cors({
 
 app.use(express.json()); // Ensure JSON body parsing middleware is used
 
+// Get ticket details
 app.get("/api/jira/tickets/:ticketId", async (_, res) => {
   const { ticketId } = _.params
   const domain = process.env.JIRA_DOMAIN
@@ -46,6 +48,7 @@ app.get("/api/jira/tickets/:ticketId", async (_, res) => {
   }
 });
 
+// Get release > ticket list (between startDate and endDate)
 app.get("/api/jira/release", async (req, res) => {
   const { jql } = req.query as { jql: string };
   const domain = process.env.JIRA_DOMAIN;
@@ -75,16 +78,101 @@ app.get("/api/jira/release", async (req, res) => {
   }
 });
 
-app.post("/api/report", (req, res) => {
+// Create report
+app.post("/api/report", async (req, res) => {
   try {
     const body = req.body
     const db = getDB()
     const collection = db.collection('reports')
-    collection.insertOne(body)
-    res.status(200).json({ message: 'Report created successfully' })
+    const result = await collection.insertOne(body)
+    const uid = result.insertedId
+
+    res.status(200).json({ uid })
   } catch (error) {
     console.log('Error creating report:', error)
+
     res.status(500).json({ error: 'Failed to create report' })
+  }
+})
+
+// Update a report
+app.put("/api/report/:uid", async (req, res) => {
+  try {
+    const { uid } = req.params
+    const body = req.body
+
+    const db = getDB()
+    const collection = db.collection('reports')
+    const result = await collection.updateOne({ _id: new ObjectId(uid) }, { $set: body })
+
+    if (result.modifiedCount === 0) {
+      res.status(404).json({ error: 'Report not found' })
+      return
+    }
+
+    res.status(200).json({ message: 'success' })
+  } catch (error) {
+    console.log('Error updating report:', error)
+
+    res.status(500).json({ error: 'Failed to update report' })
+  }
+})
+
+// Get a report by uid
+app.get("/api/reports/:uid", async (req, res) => {
+  try {
+    const { uid } = req.params
+    const db = getDB()
+    const collection = db.collection('reports')
+    const result = await collection.findOne({ _id: new ObjectId(uid) })
+
+    if (!result) {
+      res.status(404).json({ error: 'Report not found' })
+      return
+    }
+
+    res.status(200).json({ data: result, message: 'success' })
+  } catch (error) {
+    console.log('Error fetching report:', error)
+
+    res.status(500).json({ error: 'Failed to fetch report' })
+  }
+})
+
+// Get team list
+app.get('/api/teams', async (req, res) => {
+  try {
+    const db = getDB()
+    const collection = db.collection('teams')
+    const result = await collection.find({}).toArray()
+
+    res.status(200).json({ data: result, message: 'success' })
+  } catch (error) {
+    console.log('Error fetching teams:', error)
+
+    res.status(500).json({ error: 'Failed to fetch teams' })
+  }
+})
+
+// Get latest reports by reportedAt and teamId (max 5)
+app.get('/api/reports', async (req, res) => {
+  try {
+    const { reportedAt, teamId } = req.query
+    const db = getDB()
+    const collection = db.collection('reports')
+
+    const result = await collection.find({ reportedAt, _id: new ObjectId(teamId as string) }).sort({ reportedAt: -1 }).limit(5).toArray()
+
+    if (!result || result.length === 0) {
+      res.status(404).json({ error: 'No reports found' })
+      return
+    }
+
+    res.status(200).json({ data: result, message: 'success' })
+  } catch (error) {
+    console.log('Error fetching reports:', error)
+
+    res.status(500).json({ error: 'Failed to fetch reports' })
   }
 })
 
