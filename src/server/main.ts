@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:5174',
+  origin: ['http://localhost:5174', 'https://gluwa.github.io'],
 }))
 
 app.use(express.json()); // Ensure JSON body parsing middleware is used
@@ -71,8 +71,21 @@ app.get("/api/jira/release", async (req, res) => {
     if (axios.isAxiosError(error) && error.response) {
       console.error('Error status:', error.response.status);
       console.error('Error data:', error.response.data);
+      
+      if (error.response.status === 400) {
+        res.status(400).json({ success: false, message: error.response.data.errorMessages[0] })
+        return
+      }
+      if (error.response.status === 404) {
+        res.status(404).json({ success: false, message: error.response.data.errorMessages[0] })
+        return
+      }
+
+      res.status(500).json({ error: error.response.data.errorMessages[0] });
+    } else {
+      console.error('Error:', error)
     }
-    res.status(500).json({ error: "Failed to fetch release data" });
+
   }
 });
 
