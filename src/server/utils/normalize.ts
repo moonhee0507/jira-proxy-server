@@ -1,14 +1,21 @@
-type Status = 'AT_RISK_UNCONTROLLED' | 'AT_RISK_UNDER_CONTROL' | 'ON_TRACK';
+type Status = 'AT_RISK_UNCONTROLLED' | 'AT_RISK_UNDER_CONTROL' | 'ON_TRACK' | "NONE";
 
 type FeatureNode = {
     value: string;
     children?: FeatureNode[];
 }
 
-type Project = {
+export type Project = {
     name: string;
     status: Status;
     features: FeatureNode[];
+}
+
+export type ProjectFromFe = {
+  uid: string
+  status: Status
+  name: string
+  features: Delta
 }
 
 type DeltaOp = {
@@ -19,7 +26,7 @@ type DeltaOp = {
     }
 }
 
-type Delta = {
+export type Delta = {
     ops: DeltaOp[]
 }
 
@@ -27,32 +34,43 @@ export const parsedDeltaToFeatures = (delta: Delta): FeatureNode[] => {
     const stack: { node: FeatureNode, indent: number }[] = []
     const features: FeatureNode[] = []
 
-    delta.ops.forEach((op) => {
-        if (!op.insert.trim()) return; // Skip empty blocks
+    let currentText = "";
+    let currentIndent = 0;
 
-        const text = op.insert.trim()
-        const indent = op.attributes?.indent ?? 0
+    for (const op of delta.ops) {
+        if (op.insert === "\n" && op.attributes?.list) {
+            // 리스트의 끝: 하나의 항목으로 추가
+            const text = currentText.trim();
 
-        const newNode: FeatureNode = { value: text }
+            if (text) {
+                const newNode: FeatureNode = { value: text }
 
-        while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
-            stack.pop()
-        }
+                while (stack.length > 0 && stack[stack.length - 1].indent >= currentIndent) {
+                    stack.pop();
+                }
 
-        if (stack.length === 0) {
-            // 최상위 Feature
-            features.push(newNode)
-            stack.push({ node: newNode, indent })
-        } else {
-            // 가장 가까운 부모의 children으로 추가
-            const parent = stack[stack.length - 1].node
-            if (!parent.children) {
-                parent.children = []
+                if (stack.length === 0) {
+                    features.push(newNode);
+                    stack.push({ node: newNode, indent: currentIndent })
+                } else {
+                    const parent = stack[stack.length - 1].node;
+
+                    if (!parent.children) {
+                        parent.children = [];
+                    }
+
+                    parent.children.push(newNode);
+                    stack.push({ node: newNode, indent: currentIndent })
+                }
             }
-            parent.children.push(newNode)
-            stack.push({ node: newNode, indent })
+
+            currentText = "";
+            currentIndent = 0;
+        } else if (typeof op.insert === 'string') {
+            currentText +=op.insert.replace(/\n/g, '');
+            currentIndent = op.attributes?.indent ?? 0;
         }
-    })
+    }
 
     return features
 }
