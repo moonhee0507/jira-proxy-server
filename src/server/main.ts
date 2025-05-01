@@ -64,7 +64,7 @@ app.get("/api/jira/release", async (req, res) => {
       },
     });
 
-    console.log('response.data', response.data);
+    // console.log('response.data', response.data);
 
     res.status(200).json(response.data);
   } catch (error) {
@@ -94,7 +94,6 @@ app.post("/api/report", async (req, res) => {
   try {
     const body = req.body
     body.createdAt = new Date()
-
     body.reportedAt = new Date(body.reportedAt)
 
     const db = getDB()
@@ -103,6 +102,8 @@ app.post("/api/report", async (req, res) => {
     const _id = result.insertedId
 
     res.status(200).json({ _id })
+
+    // 정규화 로직 추가
   } catch (error) {
     console.error('Error creating report:', error)
 
@@ -175,7 +176,7 @@ app.get('/api/teams', async (req, res) => {
 app.get('/api/reports', async (req, res) => {
   try {
     const { reportedAt, teamId } = req.query;
-    console.log('Received query:', { reportedAt, teamId });
+    // console.log('Received query:', { reportedAt, teamId });
 
     if (!reportedAt || !teamId) {
       res.status(400).json({ error: 'Missing reportedAt or teamId' });
@@ -189,13 +190,13 @@ app.get('/api/reports', async (req, res) => {
 
     const result = await collection.find({
       'team.uid': teamId,
-      reportedAt: { $lte: reportedAtDate },
+      reportedAt: { $lte: reportedAtDate }, // less than or equal to
     })
-    .sort({ registeredAt: -1 }) // 최신 등록순
+    .sort({ reportedAt: -1 }) // 최신 등록순
     .limit(5)
     .toArray();
 
-    console.log('Fetched reports:', result);
+    // console.log('Fetched reports:', result);
 
     if (!result || result.length === 0) {
       res.status(404).json({ error: 'No reports found' });
@@ -214,11 +215,24 @@ app.get('/api/reports', async (req, res) => {
 app.get('/api/report', async (req, res) => {
   try {
     const { teamId, reportedAt } = req.query;
+    
+    const startOfDay = new Date(reportedAt as string);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(reportedAt as string);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    
     const db = getDB();
     const collection = db.collection('reports');
-    
+
     // teamId와 reportedAt을 기준으로 리포트를 검색
-    const result = await collection.findOne({ 'team.uid': teamId, reportedAt: new Date(reportedAt as string) });
+    const result = await collection.findOne({
+      'team.uid': teamId,
+      reportedAt: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      }
+    });
 
     if (!result) {
       res.status(404).json({ error: 'Report not found' });
