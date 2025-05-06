@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import axios from "axios";
 import cors from "cors";
 import { connectDB, getDB } from "./db.js";
-import { ObjectId } from "mongodb";
+import { Filter, ObjectId, Document } from "mongodb";
 import { parsedDeltaToFeatures, Project, ProjectFromFe } from "./utils/normalize.js";
 dotenv.config();
 
@@ -102,9 +102,79 @@ app.post("/api/report", async (req, res) => {
     const result = await collection.insertOne(body)
     const _id = result.insertedId
 
-    res.status(200).json({ _id })
-
     // 정규화 로직 추가
+    const rawTimelineHealth = body.timelineHealth as string
+    const parsedTimelineHealth = JSON.parse(rawTimelineHealth) as ProjectFromFe[]
+
+    const projectCollection = db.collection('projects');
+    const featureCollection = db.collection('features');
+
+    // 프로젝트별 처리
+    for (const project of parsedTimelineHealth) {
+      const { name, status, features } = project
+      const team = body.team
+
+      // 1. projects 컬렉션: 프로젝트명 저장/업데이트 (자동 제안을 위해)
+      const projectResult = await projectCollection.updateOne(
+        { 'team.uid': team.uid, name }, // 팀 uid와 프로젝트 이름으로 고유성 보장
+        [
+          {
+            $set: {
+              name,
+              team,
+              status,
+              lastUsedAt: body.reportedAt,
+              createdAt: { $ifNull: ['$createdAt', new Date()] }
+            }
+          }
+        ],
+        {
+          upsert: true // 없으면 생성, 있으면 업데이트
+        }
+      )
+      console.log('Project info updated: ', name);
+
+      // 2. project_features 컬렉션: 날짜별 features 저장
+      const projectDoc = await projectCollection.findOne({ 'team.uid': team.uid, name })
+      if (!projectDoc) {
+        console.error('Project name not found: ', name);
+        continue
+      }
+      
+      // 동일 날짜(YYYY-MM-DD) 문서 확인 및 업데이트/삽입
+      const startOfDay = new Date(body.reportedAt);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      const featureResult = await featureCollection.updateOne({ // projectId, name, reportedAt(YYYY-MM-DD)로 고유성 보장
+          projectId: projectDoc._id,
+          reportedAt: { $gte: startOfDay, $lte: endOfDay },
+        },
+        {
+          $set: { // 내용 변경
+            features: {
+              delta: JSON.stringify(features),
+              normalized: parsedDeltaToFeatures(features)
+            },
+            reportedAt: body.reportedAt,
+            updatedAt: new Date()
+          },
+          $setOnInsert: { // Create할 때 할당
+            projectId: projectDoc._id,
+            createdAt: new Date()
+          }
+        },
+        {
+          upsert: true
+        }
+      );
+
+      console.log('Features updated for:', name, startOfDay.toISOString().split('T')[0]);
+    }
+
+    res.status(200).json({ _id, message: 'success' })
   } catch (error) {
     console.error('Error creating report:', error)
 
@@ -199,7 +269,6 @@ app.put("/api/report/:uid", async (req, res) => {
       );
 
       console.log('Features updated for:', name, startOfDay.toISOString().split('T')[0]);
-
     }
 
     res.status(200).json({ _id: uid, message: 'success' })
@@ -210,56 +279,30 @@ app.put("/api/report/:uid", async (req, res) => {
   }
 })
 
-// Get our team's projects (Autocomplete)
-app.get('/api/projects/autocomplete', async (req, res) => {
+// Get projects
+app.get('/api/projects/search', async (req, res) => {
   try {
-    const { team, q } = req.query
+    const { teamId, q } = req.query
 
-    if (!team || !q) {
+    if (!teamId || !q) {
       res.status(400).json({ error: 'Missing team or query parameters' })
       return
     }
 
     const db = getDB()
     const collection = db.collection('projects')
+
+    let findQuery: Filter<Document> = { name: { $regex: q, $options: 'i' } }
+    if (teamId !== '*') {
+      findQuery['team.uid'] = teamId
+    }
+
     const projects = await collection
-      .find({
-        'team.uid': team,
-        // name: { $regex: `^${q}`, $options: 'i' }
-        name: { $regex: q, $options: 'i' }
-      })
+      .find(findQuery)
       .sort({ lastUsedAt: -1 })
       .limit(100)
       .toArray()
 
-    res.status(200).json({ data: projects, message: 'success' })
-  } catch (error) {
-    console.error('Error fetching autocomplete: ', error)
-
-    res.status(500).json({ error: 'Failed to fetch autocomplete' })
-  }
-})
-
-// Search projects
-app.get('/api/projects/search', async (req, res) => {
-  try {
-    const { q } = req.query
-
-    if (!q) {
-      res.status(400).json({ error: 'Missing query parameter' })
-      return
-    }
-
-    const db = getDB()
-    const collection = db.collection('projects')
-    const projects = await collection
-      .find({
-        name: { $regex: q, $options: 'i' }
-      })
-      .sort({ name: 1 })
-      .limit(100)
-      .toArray()
-    
     res.status(200).json({ data: projects, message: 'success' })
   } catch (error) {
     console.error('Error searching projects: ', error)
@@ -267,6 +310,34 @@ app.get('/api/projects/search', async (req, res) => {
     res.status(500).json({ error: 'Failed to search projects' })
   }
 })
+
+// Search projects
+// app.get('/api/projects/search', async (req, res) => {
+//   try {
+//     const { q } = req.query
+
+//     if (!q) {
+//       res.status(400).json({ error: 'Missing query parameter' })
+//       return
+//     }
+
+//     const db = getDB()
+//     const collection = db.collection('projects')
+//     const projects = await collection
+//       .find({
+//         name: { $regex: q, $options: 'i' }
+//       })
+//       .sort({ name: 1 })
+//       .limit(100)
+//       .toArray()
+    
+//     res.status(200).json({ data: projects, message: 'success' })
+//   } catch (error) {
+//     console.error('Error searching projects: ', error)
+
+//     res.status(500).json({ error: 'Failed to search projects' })
+//   }
+// })
 
 
 // Get a report by uid (Detail view)
