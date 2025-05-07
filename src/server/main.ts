@@ -366,7 +366,7 @@ app.get('/api/teams', async (req, res) => {
   try {
     const db = getDB()
     const collection = db.collection('teams')
-    const result = await collection.find({}).toArray()
+    const result = await collection.find({}).sort({ teamName: 1 }).toArray()
 
     res.status(200).json({ data: result, message: 'success' })
   } catch (error) {
