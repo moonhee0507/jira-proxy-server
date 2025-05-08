@@ -356,13 +356,27 @@ app.get("/api/projects/search", async (req, res) => {
         .find({
           projectId: project._id,
         })
-        .sort({ reportedAt: -1 })
+        .sort({ reportedAt: -1, "team.name": 1 })
         .limit(100)
         .toArray()
 
+      // project.features = features.map((feature) => {
+      //   const obj: { [key: string]: { value: string; children?: any }[] } = {}
+      //   const normalized = feature.features.normalized
+      //   const utcDate = new Date(feature.reportedAt)
+      //   const localDate = new Date(
+      //     utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
+      //   )
+
+      //   const dateKey = localDate.toISOString().split("T")[0]
+
+      //   obj[dateKey] = normalized
+      //   return obj
+      // })
+
       project.features = features.map((feature) => {
         const obj: { [key: string]: { value: string; children?: any }[] } = {}
-        const normalized = feature.features.normalized
+        const delta = feature.features.delta
         const utcDate = new Date(feature.reportedAt)
         const localDate = new Date(
           utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
@@ -370,7 +384,7 @@ app.get("/api/projects/search", async (req, res) => {
 
         const dateKey = localDate.toISOString().split("T")[0]
 
-        obj[dateKey] = normalized
+        obj[dateKey] = delta
         return obj
       })
     }
