@@ -86,21 +86,17 @@ app.get("/api/jira/release", async (req, res) => {
       console.error("Error data:", error.response.data)
 
       if (error.response.status === 400) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: error.response.data.errorMessages[0],
-          })
+        res.status(400).json({
+          success: false,
+          message: error.response.data.errorMessages[0],
+        })
         return
       }
       if (error.response.status === 404) {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: error.response.data.errorMessages[0],
-          })
+        res.status(404).json({
+          success: false,
+          message: error.response.data.errorMessages[0],
+        })
         return
       }
 
@@ -352,6 +348,32 @@ app.get("/api/projects/search", async (req, res) => {
       .sort({ lastUsedAt: -1 })
       .limit(100)
       .toArray()
+
+    const featuresCollection = db.collection("features")
+
+    for (const project of projects) {
+      const features = await featuresCollection
+        .find({
+          projectId: project._id,
+        })
+        .sort({ reportedAt: -1 })
+        .limit(100)
+        .toArray()
+
+      project.features = features.map((feature) => {
+        const obj: { [key: string]: { value: string; children?: any }[] } = {}
+        const normalized = feature.features.normalized
+        const utcDate = new Date(feature.reportedAt)
+        const localDate = new Date(
+          utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
+        )
+
+        const dateKey = localDate.toISOString().split("T")[0]
+
+        obj[dateKey] = normalized
+        return obj
+      })
+    }
 
     res.status(200).json({ data: projects, message: "success" })
   } catch (error) {
