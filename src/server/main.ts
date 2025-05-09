@@ -374,20 +374,82 @@ app.get("/api/projects/search", async (req, res) => {
       //   return obj
       // })
 
-      project.features = features.map((feature) => {
-        const obj: { [key: string]: { value: string; children?: any }[] } = {}
-        const delta = feature.features.delta
-        const utcDate = new Date(feature.reportedAt)
-        const localDate = new Date(
-          utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
-        )
+      project.features = features.reduce(
+        (acc, feature) => {
+          const delta = feature.features.delta
+          const utcDate = new Date(feature.reportedAt)
+          const localDate = new Date(
+            utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
+          )
+          const dateKey = localDate.toISOString().split("T")[0]
 
-        const dateKey = localDate.toISOString().split("T")[0]
+          acc[dateKey] = delta
 
-        obj[dateKey] = delta
-        return obj
-      })
+          return acc
+        },
+        {} as Record<string, string>
+      )
     }
+
+    res.status(200).json({ data: projects, message: "success" })
+  } catch (error) {
+    console.error("Error searching projects: ", error)
+
+    res.status(500).json({ error: "Failed to search projects" })
+  }
+})
+
+// Get project names by teamId
+app.get("/api/projects/names", async (req, res) => {
+  try {
+    const teamId = req.query?.teamId
+    const q = req.query.q
+
+    if (!q) {
+      res.status(400).json({ error: "Missing query value" })
+      return
+    }
+
+    const db = getDB()
+    const collection = db.collection("projects")
+
+    let findQuery: Filter<Document> = { name: { $regex: q, $options: "i" } }
+    if (teamId) {
+      findQuery["team.uid"] = teamId
+    }
+
+    // TODO: 전체 팀 조회 시 Set 또는 MongoDB aggregation으로 중복 제거
+    const projects = await collection
+      .find(findQuery)
+      .sort({ lastUsedAt: -1, name: 1 })
+      .toArray()
+
+    res.status(200).json({ data: projects, message: "success" })
+  } catch (error) {
+    console.error("Error searching projects: ", error)
+
+    res.status(500).json({ error: "Failed to search projects" })
+  }
+})
+
+// 정확히 일치
+app.get("/api/projects/exact", async (req, res) => {
+  try {
+    const q = req.query.q
+
+    if (!q) {
+      res.status(400).json({ error: "Missing query value" })
+      return
+    }
+
+    const db = getDB()
+    const collection = db.collection("projects")
+
+    // TODO: 전체 팀 조회 시 Set 또는 MongoDB aggregation으로 중복 제거
+    const projects = await collection
+      .find({ name: { $regex: `^${q}$`, $options: "i" } })
+      .sort({ lastUsedAt: -1, name: 1 })
+      .toArray()
 
     res.status(200).json({ data: projects, message: "success" })
   } catch (error) {
