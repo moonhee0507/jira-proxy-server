@@ -325,6 +325,68 @@ app.put("/api/report/:uid", async (req, res) => {
   }
 })
 
+// Get all reports paginated by teamName, reportedAt(startDate, endDate)
+app.get("/api/reports", async (req, res) => {
+  try {
+    const { teamName, startDate, endDate, page = 1, limit = 15 } = req.query
+
+    if (!teamName || !startDate || !endDate) {
+      res.status(400).json({ error: "Missing teamName or date range" })
+      return
+    }
+
+    const db = getDB()
+    const collection = db.collection("reports")
+
+    const start = new Date(startDate as string)
+    const end = new Date(endDate as string)
+
+    const pageNumber = parseInt(page as string, 10)
+    const limitNumber = parseInt(limit as string, 10)
+
+    if (isNaN(pageNumber) || isNaN(limitNumber)) {
+      res.status(400).json({ error: "Invalid page or limit value" })
+      return
+    }
+
+    const skip = (pageNumber - 1) * limitNumber
+
+    const result = await collection
+      .find({
+        "team.name": teamName,
+        reportedAt: { $gte: start, $lte: end },
+      })
+      .sort({ reportedAt: -1 }) // 최신 등록순
+      .skip(skip)
+      .limit(limitNumber)
+      .toArray()
+
+    if (!result || result.length === 0) {
+      res.status(404).json({ error: "No reports found" })
+      return
+    }
+
+    const totalCount = await collection.countDocuments({
+      "team.name": teamName,
+      reportedAt: { $gte: start, $lte: end },
+    })
+
+    res.status(200).json({
+      data: result,
+      pageInfo: {
+        page: pageNumber,
+        limit: limitNumber,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNumber),
+      },
+    })
+  } catch (error) {
+    console.error("Error searching projects: ", error)
+
+    res.status(500).json({ error: "Failed to get projects" })
+  }
+})
+
 // Get projects
 app.get("/api/projects/search", async (req, res) => {
   try {
@@ -523,10 +585,11 @@ app.get("/api/teams", async (req, res) => {
   }
 })
 
-// Get latest reports by reportedAt and teamId (max 5)
-app.get("/api/reports", async (req, res) => {
+// Get latest reports by reportedAt and teamId (max 5) - using at `Load previous reports` UI
+app.get("/api/teams/:teamId/reports", async (req, res) => {
   try {
-    const { reportedAt, teamId } = req.query
+    const { teamId } = req.params
+    const { reportedAt } = req.query
     // console.log('Received query:', { reportedAt, teamId });
 
     if (!reportedAt || !teamId) {
