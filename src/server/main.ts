@@ -328,15 +328,33 @@ app.put("/api/report/:uid", async (req, res) => {
 // Get all reports paginated by teamName, reportedAt(startDate, endDate)
 app.get("/api/reports", async (req, res) => {
   try {
-    const { teamName, startDate, endDate, page = 1, limit = 15 } = req.query
-
-    if (!teamName || !startDate || !endDate) {
-      res.status(400).json({ error: "Missing teamName or date range" })
-      return
-    }
+    const { teamName, startDate, endDate, page = 0, limit = 15 } = req.query
 
     const db = getDB()
     const collection = db.collection("reports")
+
+    let query: Filter<Document> = {}
+
+    if (teamName) {
+      if (typeof teamName === "string") {
+        try {
+          const decodedTeamNames = teamName.split(",").map(decodeURIComponent)
+          query["team.name"] = { $in: decodedTeamNames }
+        } catch (error) {
+          console.error("Error decoding teamName: ", error)
+          res.status(400).json({ error: "Invalid teamName format" })
+          return
+        }
+      } else {
+        res.status(400).json({ error: "Invalid teamName format" })
+      }
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate as string)
+      const end = new Date(endDate as string)
+      query.reportedAt = { $gte: start, $lte: end }
+    }
 
     const start = new Date(startDate as string)
     const end = new Date(endDate as string)
@@ -349,13 +367,10 @@ app.get("/api/reports", async (req, res) => {
       return
     }
 
-    const skip = (pageNumber - 1) * limitNumber
+    const skip = pageNumber * limitNumber
 
     const result = await collection
-      .find({
-        "team.name": teamName,
-        reportedAt: { $gte: start, $lte: end },
-      })
+      .find(query)
       .sort({ reportedAt: -1 }) // 최신 등록순
       .skip(skip)
       .limit(limitNumber)
