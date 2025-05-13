@@ -356,9 +356,6 @@ app.get("/api/reports", async (req, res) => {
       query.reportedAt = { $gte: start, $lte: end }
     }
 
-    const start = new Date(startDate as string)
-    const end = new Date(endDate as string)
-
     const pageNumber = parseInt(page as string, 10)
     const limitNumber = parseInt(limit as string, 10)
 
@@ -371,7 +368,7 @@ app.get("/api/reports", async (req, res) => {
 
     const result = await collection
       .find(query)
-      .sort({ reportedAt: -1 }) // 최신 등록순
+      .sort({ reportedAt: -1, "team.name": 1 })
       .skip(skip)
       .limit(limitNumber)
       .toArray()
