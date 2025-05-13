@@ -77,8 +77,6 @@ app.get("/api/jira/release", async (req, res) => {
       }
     )
 
-    // console.log('response.data', response.data);
-
     res.status(200).json(response.data)
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
@@ -112,97 +110,11 @@ app.post("/api/report", async (req, res) => {
   try {
     const body = req.body
     body.createdAt = new Date()
-    body.reportedAt = new Date(body.reportedAt)
 
     const db = getDB()
     const collection = db.collection("reports")
     const result = await collection.insertOne(body)
     const _id = result.insertedId
-
-    // 정규화 로직 추가
-    const rawTimelineHealth = body.timelineHealth as string
-    const parsedTimelineHealth = JSON.parse(
-      rawTimelineHealth
-    ) as ProjectFromFe[]
-
-    const projectCollection = db.collection("projects")
-    const featureCollection = db.collection("features")
-
-    // 프로젝트별 처리
-    for (const project of parsedTimelineHealth) {
-      const { name, status, features } = project
-      const team = body.team
-
-      // 1. projects 컬렉션: 프로젝트명 저장/업데이트 (자동 제안을 위해)
-      const projectResult = await projectCollection.updateOne(
-        { "team.uid": team.uid, name }, // 팀 uid와 프로젝트 이름으로 고유성 보장
-        [
-          {
-            $set: {
-              name,
-              team,
-              status,
-              lastUsedAt: body.reportedAt,
-              createdAt: { $ifNull: ["$createdAt", new Date()] },
-            },
-          },
-        ],
-        {
-          upsert: true, // 없으면 생성, 있으면 업데이트
-        }
-      )
-      console.log("Project info updated: ", name)
-
-      // 2. project_features 컬렉션: 날짜별 features 저장
-      const projectDoc = await projectCollection.findOne({
-        "team.uid": team.uid,
-        name,
-      })
-      if (!projectDoc) {
-        console.error("Project name not found: ", name)
-        continue
-      }
-
-      // 동일 날짜(YYYY-MM-DD) 문서 확인 및 업데이트/삽입
-      const startOfDay = new Date(body.reportedAt)
-      startOfDay.setUTCHours(0, 0, 0, 0)
-
-      const endOfDay = new Date(startOfDay)
-      endOfDay.setUTCHours(23, 59, 59, 999)
-
-      const featureResult = await featureCollection.updateOne(
-        {
-          // projectId, name, reportedAt(YYYY-MM-DD)로 고유성 보장
-          projectId: projectDoc._id,
-          reportedAt: { $gte: startOfDay, $lte: endOfDay },
-        },
-        {
-          $set: {
-            // 내용 변경
-            features: {
-              delta: JSON.stringify(features),
-              normalized: parsedDeltaToFeatures(features),
-            },
-            reportedAt: body.reportedAt,
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            // Create할 때 할당
-            projectId: projectDoc._id,
-            createdAt: new Date(),
-          },
-        },
-        {
-          upsert: true,
-        }
-      )
-
-      console.log(
-        "Features updated for:",
-        name,
-        startOfDay.toISOString().split("T")[0]
-      )
-    }
 
     res.status(200).json({ _id, message: "success" })
   } catch (error) {
@@ -217,7 +129,6 @@ app.put("/api/report/:uid", async (req, res) => {
   try {
     const { uid } = req.params
     const body = req.body
-    body.reportedAt = new Date(body.reportedAt)
     body.updatedAt = new Date()
 
     const db = getDB()
@@ -230,91 +141,6 @@ app.put("/api/report/:uid", async (req, res) => {
     if (result.modifiedCount === 0) {
       res.status(404).json({ error: "Report not found" })
       return
-    }
-
-    // 정규화 로직 추가
-    const rawTimelineHealth = body.timelineHealth as string
-    const parsedTimelineHealth = JSON.parse(
-      rawTimelineHealth
-    ) as ProjectFromFe[]
-
-    const projectCollection = db.collection("projects")
-    const featureCollection = db.collection("features")
-
-    // 프로젝트별 처리
-    for (const project of parsedTimelineHealth) {
-      const { name, status, features } = project
-      const team = body.team
-
-      // 1. projects 컬렉션: 프로젝트명 저장/업데이트 (자동 제안을 위해)
-      const projectResult = await projectCollection.updateOne(
-        { "team.uid": team.uid, name }, // 팀 uid와 프로젝트 이름으로 고유성 보장
-        [
-          {
-            $set: {
-              name,
-              team,
-              status,
-              lastUsedAt: body.reportedAt,
-              createdAt: { $ifNull: ["$createdAt", new Date()] },
-            },
-          },
-        ],
-        {
-          upsert: true, // 없으면 생성, 있으면 업데이트
-        }
-      )
-      console.log("Project info updated: ", name)
-
-      // 2. project_features 컬렉션: 날짜별 features 저장
-      const projectDoc = await projectCollection.findOne({
-        "team.uid": team.uid,
-        name,
-      })
-      if (!projectDoc) {
-        console.error("Project name not found: ", name)
-        continue
-      }
-
-      // 동일 날짜(YYYY-MM-DD) 문서 확인 및 업데이트/삽입
-      const startOfDay = new Date(body.reportedAt)
-      startOfDay.setUTCHours(0, 0, 0, 0)
-
-      const endOfDay = new Date(startOfDay)
-      endOfDay.setUTCHours(23, 59, 59, 999)
-
-      const featureResult = await featureCollection.updateOne(
-        {
-          // projectId, name, reportedAt(YYYY-MM-DD)로 고유성 보장
-          projectId: projectDoc._id,
-          reportedAt: { $gte: startOfDay, $lte: endOfDay },
-        },
-        {
-          $set: {
-            // 내용 변경
-            features: {
-              delta: JSON.stringify(features),
-              normalized: parsedDeltaToFeatures(features),
-            },
-            reportedAt: body.reportedAt,
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            // Create할 때 할당
-            projectId: projectDoc._id,
-            createdAt: new Date(),
-          },
-        },
-        {
-          upsert: true,
-        }
-      )
-
-      console.log(
-        "Features updated for:",
-        name,
-        startOfDay.toISOString().split("T")[0]
-      )
     }
 
     res.status(200).json({ _id: uid, message: "success" })
@@ -351,9 +177,15 @@ app.get("/api/reports", async (req, res) => {
     }
 
     if (startDate && endDate) {
-      const start = new Date(startDate as string)
-      const end = new Date(endDate as string)
-      query.reportedAt = { $gte: start, $lte: end }
+      // 날짜 형식 검증 (YYYY-MM-DD)
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/
+      if (
+        !datePattern.test(startDate as string) ||
+        !datePattern.test(endDate as string)
+      ) {
+        res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" })
+        return
+      }
     }
 
     const pageNumber = parseInt(page as string, 10)
@@ -430,20 +262,6 @@ app.get("/api/projects/search", async (req, res) => {
         .sort({ reportedAt: -1, "team.name": 1 })
         .limit(100)
         .toArray()
-
-      // project.features = features.map((feature) => {
-      //   const obj: { [key: string]: { value: string; children?: any }[] } = {}
-      //   const normalized = feature.features.normalized
-      //   const utcDate = new Date(feature.reportedAt)
-      //   const localDate = new Date(
-      //     utcDate.getTime() + utcDate.getTimezoneOffset() * -60 * 1000
-      //   )
-
-      //   const dateKey = localDate.toISOString().split("T")[0]
-
-      //   obj[dateKey] = normalized
-      //   return obj
-      // })
 
       project.features = features.reduce(
         (acc, feature) => {
@@ -544,28 +362,32 @@ app.get("/api/teams/:teamId/reports", async (req, res) => {
   try {
     const { teamId } = req.params
     const { reportedAt } = req.query
-    // console.log('Received query:', { reportedAt, teamId });
 
     if (!reportedAt || !teamId) {
       res.status(400).json({ error: "Missing reportedAt or teamId" })
       return
     }
 
+    // 날짜 형식 검증
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/
+    if (typeof reportedAt !== "string" || !datePattern.test(reportedAt)) {
+      res
+        .status(400)
+        .json({ error: "Invalid reportedAt format. Use YYYY-MM-DD" })
+      return
+    }
+
     const db = getDB()
     const collection = db.collection("reports")
-
-    const reportedAtDate = new Date(reportedAt as string)
 
     const result = await collection
       .find({
         "team.uid": teamId,
-        reportedAt: { $lte: reportedAtDate }, // less than or equal to
+        reportedAt: { $lte: reportedAt }, // less than or equal to
       })
-      .sort({ reportedAt: -1 }) // 최신 등록순
+      .sort({ reportedAt: -1 })
       .limit(5)
       .toArray()
-
-    // console.log('Fetched reports:', result);
 
     if (!result || result.length === 0) {
       res.status(404).json({ error: "No reports found" })
@@ -585,22 +407,13 @@ app.get("/api/report", async (req, res) => {
   try {
     const { teamId, reportedAt } = req.query
 
-    const startOfDay = new Date(reportedAt as string)
-    startOfDay.setUTCHours(0, 0, 0, 0)
-
-    const endOfDay = new Date(reportedAt as string)
-    endOfDay.setUTCHours(23, 59, 59, 999)
-
     const db = getDB()
     const collection = db.collection("reports")
 
     // teamId와 reportedAt을 기준으로 리포트를 검색
     const result = await collection.findOne({
       "team.uid": teamId,
-      reportedAt: {
-        $gte: startOfDay,
-        $lte: endOfDay,
-      },
+      reportedAt,
     })
 
     if (!result) {
