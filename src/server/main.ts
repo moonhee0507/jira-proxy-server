@@ -381,10 +381,7 @@ app.get("/api/reports", async (req, res) => {
       return
     }
 
-    const totalCount = await collection.countDocuments({
-      "team.name": teamName,
-      reportedAt: { $gte: start, $lte: end },
-    })
+    const totalCount = await collection.countDocuments(query)
 
     res.status(200).json({
       data: result,
@@ -508,61 +505,6 @@ app.get("/api/projects/names", async (req, res) => {
     res.status(500).json({ error: "Failed to search projects" })
   }
 })
-
-// 정확히 일치
-app.get("/api/projects/exact", async (req, res) => {
-  try {
-    const q = req.query.q
-
-    if (!q) {
-      res.status(400).json({ error: "Missing query value" })
-      return
-    }
-
-    const db = getDB()
-    const collection = db.collection("projects")
-
-    // TODO: 전체 팀 조회 시 Set 또는 MongoDB aggregation으로 중복 제거
-    const projects = await collection
-      .find({ name: { $regex: `^${q}$`, $options: "i" } })
-      .sort({ lastUsedAt: -1, name: 1 })
-      .toArray()
-
-    res.status(200).json({ data: projects, message: "success" })
-  } catch (error) {
-    console.error("Error searching projects: ", error)
-
-    res.status(500).json({ error: "Failed to search projects" })
-  }
-})
-
-// Search projects
-// app.get('/api/projects/search', async (req, res) => {
-//   try {
-//     const { q } = req.query
-
-//     if (!q) {
-//       res.status(400).json({ error: 'Missing query parameter' })
-//       return
-//     }
-
-//     const db = getDB()
-//     const collection = db.collection('projects')
-//     const projects = await collection
-//       .find({
-//         name: { $regex: q, $options: 'i' }
-//       })
-//       .sort({ name: 1 })
-//       .limit(100)
-//       .toArray()
-
-//     res.status(200).json({ data: projects, message: 'success' })
-//   } catch (error) {
-//     console.error('Error searching projects: ', error)
-
-//     res.status(500).json({ error: 'Failed to search projects' })
-//   }
-// })
 
 // Get a report by uid (Detail view)
 app.get("/api/reports/:uid", async (req, res) => {
