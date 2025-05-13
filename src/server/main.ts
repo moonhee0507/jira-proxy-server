@@ -23,7 +23,7 @@ app.use(
 app.use(express.json()) // Ensure JSON body parsing middleware is used
 
 // Get ticket details
-app.get("/api/jira/tickets/:ticketId", async (_, res) => {
+app.get("/api/v1/v1/jira/tickets/:ticketId", async (_, res) => {
   const { ticketId } = _.params
   const domain = process.env.JIRA_DOMAIN
   const email = process.env.JIRA_EMAIL
@@ -57,7 +57,7 @@ app.get("/api/jira/tickets/:ticketId", async (_, res) => {
 })
 
 // Get release > ticket list (between startDate and endDate)
-app.get("/api/jira/release", async (req, res) => {
+app.get("/api/v1/v1/jira/release", async (req, res) => {
   const { jql } = req.query as { jql: string }
   const domain = process.env.JIRA_DOMAIN
   const email = process.env.JIRA_EMAIL
@@ -106,7 +106,8 @@ app.get("/api/jira/release", async (req, res) => {
 })
 
 // Create report (Write view)
-app.post("/api/report", async (req, res) => {
+app.post("/api/v1/reports", async (req, res) => {
+  // TODO: `/api/reports`로 변경
   try {
     const body = req.body
     body.createdAt = new Date()
@@ -125,7 +126,8 @@ app.post("/api/report", async (req, res) => {
 })
 
 // Update a report (Edit view)
-app.put("/api/report/:uid", async (req, res) => {
+app.put("/api/v1/reports/:uid", async (req, res) => {
+  // TODO: `/api/reports`로 변경
   try {
     const { uid } = req.params
     const body = req.body
@@ -152,7 +154,7 @@ app.put("/api/report/:uid", async (req, res) => {
 })
 
 // Get all reports paginated by teamName, reportedAt(startDate, endDate)
-app.get("/api/reports", async (req, res) => {
+app.get("/api/v1/reports", async (req, res) => {
   try {
     const { teamName, startDate, endDate, page = 0, limit = 15 } = req.query
 
@@ -231,7 +233,7 @@ app.get("/api/reports", async (req, res) => {
 })
 
 // Get projects
-app.get("/api/projects/search", async (req, res) => {
+app.get("/api/v1/projects/search", async (req, res) => {
   try {
     const { teamId, q } = req.query
 
@@ -291,7 +293,7 @@ app.get("/api/projects/search", async (req, res) => {
 })
 
 // Get project names by teamId
-app.get("/api/projects/names", async (req, res) => {
+app.get("/api/v1/projects/names", async (req, res) => {
   try {
     const teamId = req.query?.teamId
     const q = req.query.q
@@ -323,8 +325,45 @@ app.get("/api/projects/names", async (req, res) => {
   }
 })
 
+// Check if a report exists by teamId and reportedAt (Before Write view or Edit view)
+app.get("/api/v1/reports/previous", async (req, res) => {
+  // TODO: `/api/reports/previous`로 변경
+  try {
+    const { teamId, reportedAt } = req.query
+
+    const startOfDay = new Date(reportedAt as string)
+    startOfDay.setUTCHours(0, 0, 0, 0)
+
+    const endOfDay = new Date(reportedAt as string)
+    endOfDay.setUTCHours(23, 59, 59, 999)
+
+    const db = getDB()
+    const collection = db.collection("reports")
+
+    // teamId와 reportedAt을 기준으로 리포트를 검색
+    const result = await collection.findOne({
+      "team.uid": teamId,
+      reportedAt: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      },
+    })
+
+    if (!result) {
+      res.status(404).json({ error: "Report not found" })
+      return
+    }
+
+    // 리포트가 존재할 경우 _id를 반환
+    res.status(200).json({ data: result, message: "success" })
+  } catch (error) {
+    console.error("Error checking report:", error)
+    res.status(500).json({ error: "Failed to check report" })
+  }
+})
+
 // Get a report by uid (Detail view)
-app.get("/api/reports/:uid", async (req, res) => {
+app.get("/api/v1/reports/:uid", async (req, res) => {
   try {
     const { uid } = req.params
     const db = getDB()
@@ -345,7 +384,7 @@ app.get("/api/reports/:uid", async (req, res) => {
 })
 
 // Get team list (Entry view)
-app.get("/api/teams", async (req, res) => {
+app.get("/api/v1/teams", async (req, res) => {
   try {
     const db = getDB()
     const collection = db.collection("teams")
@@ -360,7 +399,7 @@ app.get("/api/teams", async (req, res) => {
 })
 
 // Get latest reports by reportedAt and teamId (max 5) - using at `Load previous reports` UI
-app.get("/api/teams/:teamId/reports", async (req, res) => {
+app.get("/api/v1/teams/:teamId/reports", async (req, res) => {
   try {
     const { teamId } = req.params
     const { reportedAt } = req.query
@@ -401,33 +440,6 @@ app.get("/api/teams/:teamId/reports", async (req, res) => {
     console.error("Error fetching reports:", error)
 
     res.status(500).json({ error: "Failed to fetch reports" })
-  }
-})
-
-// Check if a report exists by teamId and reportedAt (Before Write view or Edit view)
-app.get("/api/report", async (req, res) => {
-  try {
-    const { teamId, reportedAt } = req.query
-
-    const db = getDB()
-    const collection = db.collection("reports")
-
-    // teamId와 reportedAt을 기준으로 리포트를 검색
-    const result = await collection.findOne({
-      "team.uid": teamId,
-      reportedAt,
-    })
-
-    if (!result) {
-      res.status(404).json({ error: "Report not found" })
-      return
-    }
-
-    // 리포트가 존재할 경우 _id를 반환
-    res.status(200).json({ data: result, message: "success" })
-  } catch (error) {
-    console.error("Error checking report:", error)
-    res.status(500).json({ error: "Failed to check report" })
   }
 })
 
