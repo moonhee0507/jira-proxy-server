@@ -186,6 +186,8 @@ app.get("/api/reports", async (req, res) => {
         res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" })
         return
       }
+
+      query.reportedAt = { $gte: startDate, $lte: endDate }
     }
 
     const pageNumber = parseInt(page as string, 10)
