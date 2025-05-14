@@ -23,7 +23,7 @@ app.use(
 app.use(express.json()) // Ensure JSON body parsing middleware is used
 
 // Get ticket details
-app.get("/api/v1/v1/jira/tickets/:ticketId", async (_, res) => {
+app.get("/api/v1/jira/tickets/:ticketId", async (_, res) => {
   const { ticketId } = _.params
   const domain = process.env.JIRA_DOMAIN
   const email = process.env.JIRA_EMAIL
@@ -57,7 +57,7 @@ app.get("/api/v1/v1/jira/tickets/:ticketId", async (_, res) => {
 })
 
 // Get release > ticket list (between startDate and endDate)
-app.get("/api/v1/v1/jira/release", async (req, res) => {
+app.get("/api/v1/jira/release", async (req, res) => {
   const { jql } = req.query as { jql: string }
   const domain = process.env.JIRA_DOMAIN
   const email = process.env.JIRA_EMAIL
@@ -107,7 +107,6 @@ app.get("/api/v1/v1/jira/release", async (req, res) => {
 
 // Create report (Write view)
 app.post("/api/v1/reports", async (req, res) => {
-  // TODO: `/api/reports`로 변경
   try {
     const body = req.body
     body.createdAt = new Date()
@@ -127,7 +126,6 @@ app.post("/api/v1/reports", async (req, res) => {
 
 // Update a report (Edit view)
 app.put("/api/v1/reports/:uid", async (req, res) => {
-  // TODO: `/api/reports`로 변경
   try {
     const { uid } = req.params
     const body = req.body
@@ -327,15 +325,8 @@ app.get("/api/v1/projects/names", async (req, res) => {
 
 // Check if a report exists by teamId and reportedAt (Before Write view or Edit view)
 app.get("/api/v1/reports/previous", async (req, res) => {
-  // TODO: `/api/reports/previous`로 변경
   try {
     const { teamId, reportedAt } = req.query
-
-    const startOfDay = new Date(reportedAt as string)
-    startOfDay.setUTCHours(0, 0, 0, 0)
-
-    const endOfDay = new Date(reportedAt as string)
-    endOfDay.setUTCHours(23, 59, 59, 999)
 
     const db = getDB()
     const collection = db.collection("reports")
@@ -343,10 +334,7 @@ app.get("/api/v1/reports/previous", async (req, res) => {
     // teamId와 reportedAt을 기준으로 리포트를 검색
     const result = await collection.findOne({
       "team.uid": teamId,
-      reportedAt: {
-        $gte: startOfDay,
-        $lte: endOfDay,
-      },
+      reportedAt,
     })
 
     if (!result) {
